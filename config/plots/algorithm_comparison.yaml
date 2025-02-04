@@ -1,0 +1,36 @@
+# Algorithm Comparison Plot Configuration
+algorithm_comparison:
+  title: "L2 Robust Policy Evaluation"
+  xlabel: "State Size"
+  ylabel: "Penalty (J^pi-J^pi_{U_2})"
+  figsize: [12, 7]
+  algorithms:
+    - name: "direct_optimization"
+      label: "Maximize Using SLSQP"
+      marker: "o"
+      color: "black"
+      alpha: 0.7
+    - name: "bisection"
+      label: "Algorithm 1: Binary Search"
+      marker: "^"
+      color: "red"
+      alpha: 0.7
+    - name: "random_search"
+      label: "Maximize using Random Rank 1 Kernel Guess"
+      marker: "s"
+      color: "blue"
+      alpha: 0.7
+    - name: "random_kernel"
+      label: "Maximize using Random Kernel Guess"
+      marker: "o"
+      color: "green"
+      alpha: 0.7
+  grid:
+    enabled: true
+    which: "both"
+    style: "--"
+    alpha: 0.7
+  output:
+    filename: "algorithm_comparison.png"
+    dpi: 300
+    bbox_inches: "tight"

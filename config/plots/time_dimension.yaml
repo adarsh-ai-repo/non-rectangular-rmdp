@@ -1,0 +1,31 @@
+# Time vs Dimension Plot Configuration
+time_dimension_plot:
+  title: "State Size vs. Time Taken for One Iteration of Algorithm 1"
+  xlabel: "State Size"
+  ylabel: "Time Taken (seconds)"
+  figsize: [12, 7]
+  style:
+    scatter:
+      color: "blue"
+      label: "Data points"
+      alpha: 0.7
+    fit_line:
+      color: "red"
+      label: "Polynomial fit"
+      alpha: 0.8
+    grid:
+      enabled: true
+      style: "--"
+      alpha: 0.7
+  polynomial_fit:
+    degree: 2
+    equation:
+      position: [0.05, 0.95]
+      bbox:
+        boxstyle: "round"
+        facecolor: "white"
+        alpha: 0.7
+  output:
+    filename: "time_vs_dimension.png"
+    dpi: 300
+    bbox_inches: "tight"
