@@ -1,17 +1,10 @@
-import os
 import time
-
 import matplotlib.pyplot as plt
 import numpy as np
-from joblib import Memory
 from scipy.optimize import minimize
 
 from solve_problem import solve_problem
-
-# Set up the cache
-cache_dir = "cache"
-os.makedirs(cache_dir, exist_ok=True)
-memory = Memory(cache_dir, verbose=0)
+from rl_robust.cache import memory
 
 
 def kernel(S, A):
