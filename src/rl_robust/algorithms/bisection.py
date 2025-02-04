@@ -1,10 +1,12 @@
 import numpy as np
 from typing import Tuple, Optional
 
+from typing import Tuple, Optional
+import numpy as np
 from .protocol import OptimizerProtocol
 from .direct import DirectOptimizer
 
-class BisectionOptimizer:
+class BisectionOptimizer(OptimizerProtocol):
     def __init__(self, beta: float = 0.1, gamma: float = 0.9, max_iter: int = 16, tolerance: float = 1e-5):
         self.tolerance = tolerance
         self.beta = beta

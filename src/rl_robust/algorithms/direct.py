@@ -4,7 +4,7 @@ from typing import Tuple, Optional
 
 from .protocol import OptimizerProtocol
 
-class DirectOptimizer:
+class DirectOptimizer(OptimizerProtocol):
     def __init__(self, num_trials: int = 8, time_limit: float = 120.0, tolerance: float = 1e-5):
         self.tolerance = tolerance
         self.num_trials = num_trials
