@@ -1,12 +1,12 @@
 import numpy as np
 from typing import Tuple, Optional
 
-from .base import BaseOptimizer
+from .protocol import OptimizerProtocol
 from .direct import DirectOptimizer
 
-class BisectionOptimizer(BaseOptimizer):
-    def __init__(self, beta: float = 0.1, gamma: float = 0.9, max_iter: int = 16):
-        super().__init__()
+class BisectionOptimizer:
+    def __init__(self, beta: float = 0.1, gamma: float = 0.9, max_iter: int = 16, tolerance: float = 1e-5):
+        self.tolerance = tolerance
         self.beta = beta
         self.gamma = gamma
         self.max_iter = max_iter

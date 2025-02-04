@@ -2,11 +2,11 @@ import numpy as np
 from scipy.optimize import minimize
 from typing import Tuple, Optional
 
-from .base import BaseOptimizer
+from .protocol import OptimizerProtocol
 
-class DirectOptimizer(BaseOptimizer):
-    def __init__(self, num_trials: int = 8, time_limit: float = 120.0):
-        super().__init__()
+class DirectOptimizer:
+    def __init__(self, num_trials: int = 8, time_limit: float = 120.0, tolerance: float = 1e-5):
+        self.tolerance = tolerance
         self.num_trials = num_trials
         self.time_limit = time_limit
         
