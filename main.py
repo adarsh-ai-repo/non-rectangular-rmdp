@@ -94,7 +94,7 @@ def main(
 
     results = []
 
-    filename = f"penalty_values_S{start}_step{step}_count{count}_beta{beta}.csv"
+    filename = f"penalty_values_S_{start}_step_{step}_count_{count}_beta_{beta}.csv"
 
     with typer.progressbar(state_sizes) as progress:
         for S in progress:
