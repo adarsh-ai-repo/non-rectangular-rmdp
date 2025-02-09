@@ -11,3 +11,5 @@ wheels/
 .aider*
 cache/**
 backups/**
+*.png
+*.csv
