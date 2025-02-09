@@ -7,15 +7,9 @@ from pydantic import BaseModel, Field
 class PMUserParameters(BaseModel):
     S: int = Field(..., gt=0, description="Number of states")
     A: int = Field(..., gt=0, description="Number of actions")
-    beta: float = Field(0.1, gt=0, description="Uncertainty radius")
+    beta: float = Field(gt=0, description="Uncertainty radius")
     gamma: float = Field(0.9, gt=0, lt=1, description="Discount factor")
     tolerance: float = Field(1e-5, gt=0, description="Convergence tolerance")
-
-    def __init__(self, **data):
-        super().__init__(**data)
-        if self.mu is None:
-            self.mu = np.ones(self.S) / self.S
-        self.dim_b_vector = self.S * self.A
 
     class Config:
         arbitrary_types_allowed = True
@@ -107,7 +101,7 @@ class PMDerivedValues(BaseModel):
         gamma = params.gamma
         # Calculate initial state distribution
         mu = np.ones(S) / S
-        
+
         # Calculate dimension of b vector
         dim_b_vector = S * A
 

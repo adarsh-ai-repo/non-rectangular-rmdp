@@ -1,17 +1,18 @@
 import numpy as np
 
-from datamodels import PMRandomComponents, PMUserParameters
+from datamodels import PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
 def compute_return(
     P: np.ndarray,
     params: PMUserParameters,
     random_components: PMRandomComponents,
+    derived_values: PMDerivedValues,
 ) -> float:
     P_pi = np.einsum("sai,sa->si", P, random_components.pi)
     R_pi = np.sum(random_components.pi * random_components.R, axis=1)
     v_pi = np.linalg.inv(np.eye(params.S) - params.gamma * P_pi) @ R_pi
-    return float(params.mu @ v_pi)
+    return float(derived_values.mu @ v_pi)
 
 
 def project_to_simplex(v: np.ndarray) -> np.ndarray:
@@ -41,6 +42,7 @@ def RPE_Brute_Force(
     params: PMUserParameters,
     random_components: PMRandomComponents,
     num_samples: int,
+    derived_values: PMDerivedValues,
 ) -> float:
     """
     Compute the Robust Policy Evaluation using brute force sampling.
@@ -54,12 +56,14 @@ def RPE_Brute_Force(
     Returns:
         Maximum penalty found
     """
-    nominal_return = compute_return(random_components.P, params, random_components)
+    nominal_return = compute_return(
+        random_components.P, params, random_components, derived_values
+    )
     penalty_list = []
 
     for _ in range(num_samples):
         P_sample = sample_random_kernel(params, random_components)
-        J_pi = compute_return(P_sample, params, random_components)
+        J_pi = compute_return(P_sample, params, random_components, derived_values)
         penalty = nominal_return - J_pi
         penalty_list.append(penalty)
 
