@@ -1,16 +1,11 @@
-import time
-from datetime import datetime
-
 import numpy as np
 
-from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMUserParameters
+from datamodels import PMDerivedValues, PMUserParameters
 
 
 def optimize_using_random_rank_1_kernel(
     params: PMUserParameters,
     derived_values: PMDerivedValues,
-    performance_data: AlgorithmPerformanceData,
-    rc_hash: str = "unknown",
     num_guesses: int = 10000,
 ) -> tuple[float, np.ndarray | None, np.ndarray | None]:
     """
@@ -46,7 +41,6 @@ def optimize_using_random_rank_1_kernel(
     best_value = float("-inf")
     best_b = None
     best_k = None
-    start_time = time.time()
 
     for i in range(num_guesses):
         # Generate random b
@@ -61,21 +55,11 @@ def optimize_using_random_rank_1_kernel(
         x = np.concatenate([b, k])
         value = objective(x)
 
-        # At the end of the iteration
-        iteration_time = time.time() - start_time
-        performance_data["algorithm_name"].append("random_rank_1_kernel")
-        performance_data["iteration_count"].append(i + 1)
-        performance_data["time_taken"].append(iteration_time)
-        performance_data["Penalty"].append(float(value))
-        performance_data["S"].append(params.S)
-        performance_data["A"].append(params.A)
-        performance_data["beta"].append(params.beta)
-        performance_data["hash"].append(rc_hash)
-        performance_data["start_time"].append(datetime.fromtimestamp(start_time))
-
         if value > best_value:
             best_value = value
             best_b = b
             best_k = k
+
+        # At the end of the iteration
 
     return best_value, best_b, best_k

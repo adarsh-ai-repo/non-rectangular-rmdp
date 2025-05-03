@@ -60,7 +60,7 @@ def optimize_using_eigen_value_and_bisection(
     float: Optimized lambda value
     """
     min_lambda_value = 0
-    max_lambda_value = 10 * params.beta
+    max_lambda_value = 1 / (1 - params.gamma)
     lambda_value = (min_lambda_value + max_lambda_value) / 2
     start_time = time.time()
 
@@ -78,7 +78,9 @@ def optimize_using_eigen_value_and_bisection(
         performance_data["algorithm_name"].append("eigen_bisection")
         performance_data["iteration_count"].append(i + 1)
         performance_data["time_taken"].append(iteration_time)
-        performance_data["Penalty"].append(float(new_value))  # Using new_value as penalty metric
+        performance_data["j_pi"].append(
+            derived_values.j_pi - float(new_value)
+        )  # Using new_value as penalty metric
         performance_data["S"].append(params.S)
         performance_data["A"].append(params.A)
         performance_data["beta"].append(params.beta)

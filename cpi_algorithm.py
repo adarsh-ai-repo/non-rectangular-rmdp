@@ -1,8 +1,11 @@
 import time
 from datetime import datetime
 
+import jax.numpy as jnp
 import numpy as np
+from jaxtyping import Float
 from rich.progress import track
+from scipy.optimize import minimize
 
 from datamodels import (
     AlgorithmPerformanceData,
@@ -11,67 +14,20 @@ from datamodels import (
     PMUserParameters,
 )
 
-# Note: compute_return is not directly used as the value function is calculated within the loop.
-# from brute_force import compute_return, project_to_simplex # project_to_simplex not needed for the chosen P* method
-
-
-def _compute_P_star_sa(C_sa: np.ndarray, P_hat_sa: np.ndarray, beta: float, S: int) -> np.ndarray:
-    """
-    Solves argmin_{p} C_sa @ p subject to sum(p)=1, p>=0, ||p - P_hat_sa||_1 <= beta
-    for a single state-action pair (s, a).
-
-    Uses a greedy approach by shifting probability mass from the highest cost successor state
-    to the lowest cost successor state, constrained by the L1 ball.
-
-    Args:
-        C_sa: Cost vector for the given (s, a), shape (S,).
-        P_hat_sa: Nominal transition probabilities for (s, a), shape (S,).
-        beta: Radius of the L1 uncertainty ball.
-        S: Number of states.
-
-    Returns:
-        The optimized probability vector p*, shape (S,).
-    """
-    p_star = P_hat_sa.copy()
-    if S == 1:  # Trivial case if only one successor state
-        return p_star
-
-    s_min = np.argmin(C_sa)
-    s_max = np.argmax(C_sa)
-
-    if s_min == s_max:  # All costs are the same, no improvement possible
-        return p_star
-
-    # The maximum probability mass we can shift is beta / 2.
-    # We shift from s_max to s_min.
-    delta = beta / 2.0
-
-    # Ensure the shift doesn't violate probability constraints (p >= 0).
-    # We can decrease p_star[s_max] by at most p_star[s_max].
-    # We can increase p_star[s_min] by at most 1.0 - p_star[s_min].
-    actual_delta = min(delta, p_star[s_max], 1.0 - p_star[s_min])
-
-    # Apply the shift
-    p_star[s_min] += actual_delta
-    p_star[s_max] -= actual_delta
-
-    # Due to potential floating-point inaccuracies, ensure constraints hold.
-    p_star = np.maximum(p_star, 0.0)  # Ensure non-negative
-    p_star /= np.sum(p_star)  # Ensure sums to 1
-
-    # Optional: Verify L1 constraint (should hold by construction)
-    # l1_dist = np.sum(np.abs(p_star - P_hat_sa))
-    # assert l1_dist <= beta + 1e-9, f"L1 distance {l1_dist} exceeds beta {beta}"
-
-    return p_star
+S = "S"
+SAS = "SAS"
+SA = "SA"
 
 
 def run_cpi_algorithm(
     params: PMUserParameters,
     random_components: PMRandomComponents,
+    derived_values: PMDerivedValues,
     performance_data: AlgorithmPerformanceData,
+    iteration_number: int,
+    best_robust_return: float,
     max_iter: int = 300,
-) -> None:
+) -> tuple[float, int]:
     """
     Implements the CPI Algorithm 3.2 for Robust Policy Evaluation.
 
@@ -94,109 +50,122 @@ def run_cpi_algorithm(
         - beta: Uncertainty radius
         - hash: MD5 hash of PMRandomComponents
     """
-    S, A = params.S, params.A
-    gamma = params.gamma
-    tolerance = params.tolerance
-    beta = params.beta
 
-    P_hat = random_components.P
-    pi = random_components.pi
-    R = random_components.R
+    P_hat: Float[np.ndarray, "S A S"] = random_components.P
 
-    # Initial state distribution (uniform)
-    mu = np.ones(S) / S
+    # f(P) := (1 / (1 - γ)) Σ_(s,a,s') d_pi_hat(s) π(a|s) A^π_P̂(s,a,s') P(s'|s,a)
+    # where A^π_P(s,a,s') := γ [ P(s'|s,a) v^π_P(s') - Σ_(s") P(s"|s,a) v^π_P(s') ]
 
-    # Initialize P_n with the nominal kernel
-    P_n = P_hat.copy()
-    R_pi = np.sum(pi * R, axis=1)  # Policy-averaged reward (constant)
-
-    # Calculate nominal return (J^π)
-    P_pi_nominal = np.einsum("sai,sa->si", P_hat, pi, optimize=True)
-    v_pi_nominal = PMDerivedValues.compute_value_function(P_pi_nominal, R_pi, gamma)
-    J_pi_nominal = float(mu @ v_pi_nominal)
+    P_n: Float[np.ndarray, "S A S"] = P_hat.copy()
 
     # Get hash value of random components
     rc_hash = random_components.md5_hash
-
+    start_time = time.time()
     for n in track(list(range(max_iter))):
-        start_time = time.time()
-        # 1. Calculate policy-averaged kernel for P_n
-        P_pi_n = np.einsum("sai,sa->si", P_n, pi, optimize=True)
-
+        x: Float[np.ndarray, "1 A S"] = P_n - jnp.einsum("ias->as", P_n)[None, :, :]
         # 2. Calculate value function v^pi_{P_n}
-        v_pi_Pn = PMDerivedValues.compute_value_function(P_pi_n, R_pi, gamma)
+        v_pi_Pn: Float[np.ndarray, "S"] = PMDerivedValues.compute_value_function(
+            np.einsum("sa,sab->sb", random_components.pi, P_n), derived_values.R_pi, params.gamma
+        )
+        A_pi_Pn: Float[np.ndarray, "S A S"] = params.gamma * (P_n - x) * v_pi_Pn[:, None, None]
 
-        # 3. Calculate occupation measure d^pi_{P_n}
-        _, d_pi_Pn = PMDerivedValues.compute_occupation_measures(P_pi_n, gamma)  # We only need d_pi
+        fpn_list: list[float] = []
 
-        # 4. Calculate Advantage A^pi_{P_n}(s, a, s')
-        # A(s,a,s') = gamma * (v(s') - sum_{s"} P_n(s"|s,a) v(s"))
-        v_sum_sa = np.einsum("sat,t->sa", P_n, v_pi_Pn, optimize=True)  # sum_{s"} P_n(s"|s,a) v(s")
-        # Expand v_pi_Pn to (S, A, S) and v_sum_sa to (S, A, S) for broadcasting
-        A_pi_Pn = gamma * (v_pi_Pn[None, None, :] - v_sum_sa[:, :, None])
+        def objective(p: Float[np.ndarray, "SAS"]) -> float:
+            p_reshaped = p.reshape(params.S, params.A, params.S)
+            fpn = jnp.einsum(
+                "s,sa,sai,ias->", derived_values.d_pi, random_components.pi, A_pi_Pn, p_reshaped
+            ).item()
+            fpn_list.append(fpn)
+            return fpn
 
-        # 5. Define coefficients C for the optimization objective f(P)
-        # C(s,a,s') = (1/(1-gamma)) * d^pi_{P_n}(s) * pi(a|s) * A^pi_{P_n}(s, a, s')
-        C = (1.0 / (1.0 - gamma)) * (d_pi_Pn[:, None, None] * pi[:, :, None] * A_pi_Pn)
+        # Define bounds for each probability: 0 ≤ P(s'|s,a) ≤ 1
+        bounds = [(0, 1)] * (params.S * params.A * params.S)
 
-        # 6. Compute P* = argmin_{P in Uc} f(P) = argmin_{P in Uc} sum_{s,a,s'} C(s,a,s') P(s'|s,a)
-        # This decomposes into independent minimizations for each (s, a) pair.
-        P_star = np.zeros_like(P_n)
-        for s in range(S):
-            for a in range(A):
-                P_star[s, a, :] = _compute_P_star_sa(C[s, a, :], P_hat[s, a, :], beta, S)
+        # Define the L2 norm constraint: ||P-P_hat||_2 ≤ β
+        def constraint_l2_norm(p: Float[np.ndarray, "SAS"]) -> float:
+            p_hat_reshaped = P_hat.reshape(params.S * params.A * params.S)
+            return params.beta - float(np.linalg.norm(p - p_hat_reshaped, ord=2))
 
-        # 7. Calculate f(P*) = sum_{s,a,s'} C(s,a,s') P*(s'|s,a)
-        # Note: C already includes the (1/(1-gamma)) factor.
-        f_P_star = np.sum(C * P_star)
+        # Define the probability sum constraint: ∑_{s'} P(s'|s,a) = 1 for all s,a
+        def constraint_prob_sum(p: Float[np.ndarray, "SAS"]) -> Float[np.ndarray, "SA"]:
+            p_hat_reshaped = p.reshape(params.S, params.A, params.S)
+            return (np.sum(p_hat_reshaped, axis=2) - 1.0).reshape(params.A * params.S)
 
-        # 8. Calculate step size alpha_n
-        # alpha_n = - ( (1-gamma)^3 / (4 * gamma^2) ) * f(P*)
-        # Ensure alpha_n is non-negative (f_P_star should be <= 0 theoretically)
-        alpha_n_num = -(((1.0 - gamma) ** 3) * f_P_star)
-        alpha_n_den = 4.0 * (gamma**2)
-        if alpha_n_den == 0:
-            # Avoid division by zero if gamma is 0 (though gamma > 0 constraint exists)
-            alpha_n = 0.0 if alpha_n_num == 0 else np.inf  # Or handle as error
-        else:
-            alpha_n = alpha_n_num / alpha_n_den
+        # Create constraint dictionaries for scipy.optimize.minimize
+        constraints = [
+            {"type": "ineq", "fun": constraint_l2_norm},  # L2 norm constraint
+            {"type": "eq", "fun": constraint_prob_sum},  # Probability sum constraint
+        ]
+        try:
+            result = minimize(
+                objective,
+                P_n.reshape(params.S * params.A * params.S),  # Flatten P_n for optimization
+                method="SLSQP",
+                bounds=bounds,
+                constraints=constraints,
+                options={"maxiter": 100, "ftol": params.tolerance, "iprint": 1, "disp": False},
+            )
+        except KeyError as e:
+            print(f"SLSQP optimizer encountered an invalid exit mode: {e}")
+            # Create a dummy result with the current P_n as the solution
+            from types import SimpleNamespace
 
-        # Clamp alpha_n for stability, although theory might guarantee 0 <= alpha_n <= 1
-        alpha_n = np.clip(alpha_n, 0.0, 1.0)
+            result = SimpleNamespace(
+                x=P_n.reshape(params.S * params.A * params.S),
+                success=False,
+                message="SLSQP optimizer failed with invalid exit mode",
+            )
 
-        # 9. Update P_{n+1}
-        P_next = (1.0 - alpha_n) * P_n + alpha_n * P_star
+        # Reshape the result back to the original shape
+        P_star = result.x.reshape(params.S, params.A, params.S)
 
-        # 10. Check for convergence
-        diff = np.max(np.abs(P_next - P_n))
+        # Get the objective function value f(P*) - the last value in fpn_list
+        f_P_star = fpn_list[-1] if fpn_list else 0.0
 
-        # Calculate current return J^π_{P_n}
-        P_pi_n = np.einsum("sai,sa->si", P_n, pi, optimize=True)
-        v_pi_n = PMDerivedValues.compute_value_function(P_pi_n, R_pi, gamma)
-        J_pi_P_n = float(mu @ v_pi_n)
+        # Calculate alpha_n according to the formula: α_n = -((1-γ)^3)/(4γ^2) * f(P*)
+        alpha_n = -((1 - params.gamma) ** 3) / (4 * params.gamma**2) * f_P_star
 
-        # Calculate penalty (J^π - J^π_{P_n})
-        penalty = J_pi_nominal - J_pi_P_n
+        # Store the previous P_n for convergence check
+        P_n_prev = P_n.copy()
+
+        # Update P_n according to the formula: P_{n+1} = (1-α_n)P_n + α_n P*
+        P_n = (1 - alpha_n) * P_n + alpha_n * P_star
+
+        # Calculate value function for the updated P_n
+        v_pi_updated = PMDerivedValues.compute_value_function(
+            np.einsum("sa,sab->sb", random_components.pi, P_n),  # P_pi from P_n
+            derived_values.R_pi,
+            params.gamma,
+        )
+
+        # Calculate expected return under current policy and transition kernel
+        j_pi_current = float(derived_values.mu @ v_pi_updated)
+
+        print(f"{n=:<6} {j_pi_current=}")
+
+        # Calculate difference for convergence check (L2 norm of the difference)
+        diff = float(np.linalg.norm(P_n - P_n_prev))
+        best_robust_return = min(best_robust_return, j_pi_current)
 
         # Record data for this iteration
         iteration_time = time.time() - start_time
         performance_data["algorithm_name"].append("cpi_algorithm")
-        performance_data["iteration_count"].append(n + 1)
+        performance_data["iteration_count"].append(iteration_number)
         performance_data["time_taken"].append(iteration_time)
-        performance_data["Penalty"].append(penalty)
-        performance_data["S"].append(S)
-        performance_data["A"].append(A)
-        performance_data["beta"].append(beta)
+        performance_data["j_pi"].append(best_robust_return)
+        performance_data["S"].append(params.S)
+        performance_data["A"].append(params.A)
+        performance_data["beta"].append(params.beta)
         performance_data["hash"].append(rc_hash)
         performance_data["start_time"].append(datetime.fromtimestamp(start_time))
 
-        if diff < tolerance:
-            P_n = P_next  # Store the final converged kernel
+        iteration_number += 1
+
+        if diff < params.tolerance and n > 1:
             print(f"CPI Algorithm converged after {n + 1} iterations.")
             break
-
-        # Update P_n for the next iteration
-        P_n = P_next
     else:
         # Loop finished without converging
         print(f"CPI Algorithm did not converge within {max_iter} iterations.")
+    return best_robust_return, iteration_number

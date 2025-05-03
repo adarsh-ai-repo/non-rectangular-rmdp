@@ -1,6 +1,3 @@
-import time
-from datetime import datetime
-
 import numpy as np
 
 from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
@@ -63,7 +60,6 @@ def RPE_Brute_Force(
     """
     nominal_return = compute_return(random_components.P, params, random_components, derived_values)
     penalty_list = []
-    start_time = time.time()
 
     for i in range(num_samples):
         P_sample = sample_random_kernel(params, random_components)
@@ -73,15 +69,5 @@ def RPE_Brute_Force(
 
         # Record performance data
         # At the end of the iteration
-        iteration_time = time.time() - start_time
-        performance_data["algorithm_name"].append("brute_force")
-        performance_data["iteration_count"].append(i + 1)
-        performance_data["time_taken"].append(iteration_time)
-        performance_data["Penalty"].append(float(penalty))
-        performance_data["S"].append(params.S)
-        performance_data["A"].append(params.A)
-        performance_data["beta"].append(params.beta)
-        performance_data["hash"].append(rc_hash)
-        performance_data["start_time"].append(datetime.fromtimestamp(start_time))
 
     return max(penalty_list)

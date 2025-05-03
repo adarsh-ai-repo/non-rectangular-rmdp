@@ -4,7 +4,11 @@ from functools import cached_property
 from typing import Tuple, TypedDict
 
 import numpy as np
+from jaxtyping import Float, Shaped
 from pydantic import BaseModel, Field
+
+S = "S"
+A = "A"
 
 
 class PMUserParameters(BaseModel):
@@ -12,24 +16,26 @@ class PMUserParameters(BaseModel):
     A: int = Field(..., gt=0, description="Number of actions")
     beta: float = Field(..., gt=0, description="Uncertainty radius")
     gamma: float = Field(0.9, gt=0, lt=1, description="Discount factor")
-    tolerance: float = Field(1e-5, gt=0, description="Convergence tolerance")
+    tolerance: float = Field(1e-4, gt=0, description="Convergence tolerance")
 
 
-def array_string_repr(array: np.ndarray):
-    return np.array2string(array, precision=2, separator=",", suppress_small=True, max_line_width=100_000)
+def array_string_repr(array: Shaped[np.ndarray, "..."]) -> str:
+    return np.array2string(
+        np.array(array), precision=2, separator=",", suppress_small=True, max_line_width=100_000
+    )
 
 
 class PMRandomComponents(BaseModel):
-    v0: np.ndarray  # initial value function
-    pi: np.ndarray  # initial policy
-    R: np.ndarray  # reward function
-    P: np.ndarray  # transition kernel
+    v0: Float[np.ndarray, "S"]  # initial value function
+    pi: Float[np.ndarray, "S A"]  # initial policy
+    R: Float[np.ndarray, "S A"]  # reward function
+    P: Float[np.ndarray, "S A S"]  # transition kernel
 
     class Config:
         arbitrary_types_allowed = True
 
     @staticmethod
-    def kernel(S: int, A: int) -> np.ndarray:
+    def kernel(S: int, A: int) -> Float[np.ndarray, "S A S"]:
         p = np.random.rand(S, A, S)
         for s in range(S):
             for a in range(A):
@@ -56,12 +62,12 @@ class PMRandomComponents(BaseModel):
     @cached_property
     def md5_hash(self) -> str:
         """
-        Calculate MD5 hash based on the string representation of numpy arrays with 2 decimal places.
+        Calculate MD5 hash based on the string representation of arrays with 2 decimal places.
 
         Returns:
             str: MD5 hash of the components
         """
-        # Format each numpy array with 2 decimal places
+        # Format each array with 2 decimal places
         v0_str = array_string_repr(self.v0)
         pi_str = array_string_repr(self.pi)
         R_str = array_string_repr(self.R)
@@ -77,23 +83,26 @@ class PMRandomComponents(BaseModel):
 
 
 class PMDerivedValues(BaseModel):
-    P_pi: np.ndarray  # policy-averaged transition kernel
-    R_pi: np.ndarray  # policy-averaged reward
-    v_pi: np.ndarray  # value function
-    D_pi: np.ndarray  # occupation matrix
-    d_pi: np.ndarray  # occupation measure
-    H: np.ndarray  # policy matrix
-    PHI: np.ndarray  # phi matrix
-    matrix_part1: np.ndarray
-    matrix_part2: np.ndarray
-    mu: np.ndarray  # initial state distribution
+    P_pi: Float[np.ndarray, "S S"]  # policy-averaged transition kernel
+    R_pi: Float[np.ndarray, "S"]  # policy-averaged reward
+    v_pi: Float[np.ndarray, "S"]  # value function
+    D_pi: Float[np.ndarray, "S S"]  # occupation matrix
+    d_pi: Float[np.ndarray, "S"]  # occupation measure
+    H: Float[np.ndarray, "S SA"]  # policy matrix
+    PHI: Float[np.ndarray, "S S"]  # phi matrix
+    matrix_part1: Float[np.ndarray, "S SA"]
+    matrix_part2: Float[np.ndarray, "S SA"]
+    mu: Float[np.ndarray, "S"]  # initial state distribution
     dim_b_vector: int
+    j_pi: float
 
     class Config:
         arbitrary_types_allowed = True
 
     @staticmethod
-    def compute_value_function(P_pi: np.ndarray, R_pi: np.ndarray, gamma: float) -> np.ndarray:
+    def compute_value_function(
+        P_pi: Float[np.ndarray, "S S"], R_pi: Float[np.ndarray, "S"], gamma: float
+    ) -> Float[np.ndarray, "S"]:
         """
         Compute the value function v^π given the policy-averaged transition kernel and reward function.
         """
@@ -105,7 +114,9 @@ class PMDerivedValues(BaseModel):
         return v_pi
 
     @staticmethod
-    def compute_occupation_measures(P_pi: np.ndarray, gamma: float) -> Tuple[np.ndarray, np.ndarray]:
+    def compute_occupation_measures(
+        P_pi: Float[np.ndarray, "S S"], gamma: float
+    ) -> Tuple[Float[np.ndarray, "S S"], Float[np.ndarray, "S"]]:
         """
         Compute the occupation matrix D^π and occupation measure d^π.
         """
@@ -157,7 +168,8 @@ class PMDerivedValues(BaseModel):
         # Calculate matrix parts
         matrix_part1 = PHI @ np.outer(v_pi, d_pi) @ H
         matrix_part2 = PHI @ D_pi @ H
-
+        j_pi = float(mu @ v_pi)
+        print(f"Nominal {j_pi=}")
         return cls(
             P_pi=P_pi,
             R_pi=R_pi,
@@ -170,6 +182,7 @@ class PMDerivedValues(BaseModel):
             matrix_part2=matrix_part2,
             mu=mu,
             dim_b_vector=dim_b_vector,
+            j_pi=j_pi,
         )
 
 
@@ -194,7 +207,7 @@ class AlgorithmPerformanceData(TypedDict):
     algorithm_name: list[str]
     iteration_count: list[int]
     time_taken: list[float]
-    Penalty: list[float]
+    j_pi: list[float]
     S: list[int]
     A: list[int]
     beta: list[float]
@@ -207,7 +220,7 @@ def initialize_empty_performance_data() -> AlgorithmPerformanceData:
         "algorithm_name": [],
         "iteration_count": [],
         "time_taken": [],
-        "Penalty": [],
+        "j_pi": [],
         "S": [],
         "A": [],
         "beta": [],

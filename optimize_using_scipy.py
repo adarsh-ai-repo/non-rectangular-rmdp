@@ -26,6 +26,7 @@ def optimize_using_slsqp_method(
     Returns:
     tuple: (optimal_value, b_opt, k_opt, performance_data)
     """
+
     S, A = params.S, params.A
     v_pi, d_pi, D_pi = derived_values.v_pi, derived_values.d_pi, derived_values.D_pi
     gamma, beta = params.gamma, params.beta
@@ -47,7 +48,7 @@ def optimize_using_slsqp_method(
         """
         float: Penalty value calculated as gamma * (-latest_obj_value)
         """
-        return gamma * (-min(penalties))
+        return -1 * gamma * (min(penalties))
 
     def constraint_b(x):
         b = x[: S * A]
@@ -75,40 +76,33 @@ def optimize_using_slsqp_method(
     # Correct bounds: b is non-negative, k is unbounded
     bounds = [(0, None)] * (S * A) + [(None, None)] * S
 
-    # Define callback function for performance tracking
-    def callback(x):
-        nonlocal iteration
-
-        # Calculate time taken for this iteration
-        current_time = time.time()
-        time_taken = current_time - start_time
-
-        # Calculate penalty using the latest objective function value
-        penalty = calculate_penalty()
-
-        # Update performance data
-        performance_data["algorithm_name"].append("slsqp_method")
-        performance_data["iteration_count"].append(iteration + 1)  # 1-based indexing
-        performance_data["time_taken"].append(time_taken)
-        performance_data["Penalty"].append(penalty)
-        performance_data["S"].append(S)
-        performance_data["A"].append(A)
-        performance_data["beta"].append(beta)
-        performance_data["hash"].append(random_components.md5_hash)  # Placeholder hash
-        performance_data["start_time"].append(datetime.fromtimestamp(start_time))
-
-        # Increment iteration counter
-        iteration += 1
-
     _result = minimize(
         objective,
         x0,
         method="SLSQP",
         bounds=bounds,
         constraints=constraints,
-        callback=callback,
         options={"maxiter": 100, "ftol": 5e-4, "iprint": 1, "disp": True},
     )
+
+    current_time = time.time()
+    time_taken = current_time - start_time
+
+    # Calculate penalty using the latest objective function value
+    penalty = calculate_penalty()
+
+    # Update performance data
+    performance_data["algorithm_name"].append("slsqp_method")
+    performance_data["iteration_count"].append(iteration)  # 1-based indexing
+    performance_data["time_taken"].append(time_taken)
+    performance_data["j_pi"].append(derived_values.j_pi - penalty)
+    performance_data["S"].append(S)
+    performance_data["A"].append(A)
+    performance_data["beta"].append(beta)
+    performance_data["hash"].append(random_components.md5_hash)  # Placeholder hash
+    performance_data["start_time"].append(datetime.fromtimestamp(start_time))
+
+    # Increment iteration counter
 
     # if result.success:
     #     b_opt, k_opt = result.x[: S * A], result.x[S * A :]
