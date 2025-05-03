@@ -1,6 +1,9 @@
+import time
+from datetime import datetime
+
 import numpy as np
 
-from datamodels import PMDerivedValues, PMRandomComponents, PMUserParameters
+from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
 def compute_return(
@@ -24,9 +27,7 @@ def project_to_simplex(v: np.ndarray) -> np.ndarray:
     return np.maximum(v - theta, 0)
 
 
-def sample_random_kernel(
-    params: PMUserParameters, random_components: PMRandomComponents
-) -> np.ndarray:
+def sample_random_kernel(params: PMUserParameters, random_components: PMRandomComponents) -> np.ndarray:
     noise = np.random.normal(0, params.beta, size=random_components.P.shape)
     noise = noise / np.linalg.norm(noise)
     noise = params.beta * noise * np.clip(1 - np.random.exponential(1 / params.S), 0, 1)
@@ -43,6 +44,8 @@ def RPE_Brute_Force(
     random_components: PMRandomComponents,
     num_samples: int,
     derived_values: PMDerivedValues,
+    performance_data: AlgorithmPerformanceData,
+    rc_hash: str,
 ) -> float:
     """
     Compute the Robust Policy Evaluation using brute force sampling.
@@ -50,21 +53,35 @@ def RPE_Brute_Force(
     Args:
         params: User-defined parameters
         random_components: Random components of the MDP
-        derived_values: Derived values from the MDP
         num_samples: Number of samples to generate
+        derived_values: Derived values from the MDP
+        performance_data: Dictionary to store performance metrics
+        rc_hash: Hash of random components for tracking
 
     Returns:
         Maximum penalty found
     """
-    nominal_return = compute_return(
-        random_components.P, params, random_components, derived_values
-    )
+    nominal_return = compute_return(random_components.P, params, random_components, derived_values)
     penalty_list = []
+    start_time = time.time()
 
-    for _ in range(num_samples):
+    for i in range(num_samples):
         P_sample = sample_random_kernel(params, random_components)
         J_pi = compute_return(P_sample, params, random_components, derived_values)
         penalty = nominal_return - J_pi
         penalty_list.append(penalty)
+
+        # Record performance data
+        # At the end of the iteration
+        iteration_time = time.time() - start_time
+        performance_data["algorithm_name"].append("brute_force")
+        performance_data["iteration_count"].append(i + 1)
+        performance_data["time_taken"].append(iteration_time)
+        performance_data["Penalty"].append(float(penalty))
+        performance_data["S"].append(params.S)
+        performance_data["A"].append(params.A)
+        performance_data["beta"].append(params.beta)
+        performance_data["hash"].append(rc_hash)
+        performance_data["start_time"].append(datetime.fromtimestamp(start_time))
 
     return max(penalty_list)

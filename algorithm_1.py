@@ -1,6 +1,9 @@
+import time
+from datetime import datetime
+
 import numpy as np
 
-from datamodels import PMDerivedValues, PMUserParameters
+from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMUserParameters
 
 
 def get_max_eigenvalue(A: np.ndarray):
@@ -27,7 +30,7 @@ def get_max_eigenvalue(A: np.ndarray):
     U = V_plus / np.linalg.norm(V_plus, axis=0)
 
     # Compute s_i <v_i, u_i> for all i
-    scores = s * np.einsum("ij,ij->j", V, U)
+    scores = s * np.einsum("ij,ij->j", V, U, optimize=True)
 
     # Find j that maximizes the score
     j = np.argmax(scores)
@@ -39,7 +42,10 @@ def get_max_eigenvalue(A: np.ndarray):
 
 
 def optimize_using_eigen_value_and_bisection(
-    params: PMUserParameters, derived_values: PMDerivedValues
+    params: PMUserParameters,
+    derived_values: PMDerivedValues,
+    performance_data: AlgorithmPerformanceData,
+    rc_hash: str,
 ) -> float:
     """
     Optimize using eigenvalue and bisection method with the new data models.
@@ -47,6 +53,8 @@ def optimize_using_eigen_value_and_bisection(
     Parameters:
     params: PMUserParameters - Contains user-defined parameters like beta, gamma
     derived_values: PMDerivedValues - Contains derived matrices and values
+    performance_data: AlgorithmPerformanceData - Dictionary to store performance metrics
+    rc_hash: str - Hash of random components for tracking
 
     Returns:
     float: Optimized lambda value
@@ -54,6 +62,7 @@ def optimize_using_eigen_value_and_bisection(
     min_lambda_value = 0
     max_lambda_value = 10 * params.beta
     lambda_value = (min_lambda_value + max_lambda_value) / 2
+    start_time = time.time()
 
     def get_input_matrix(lambda_value: float) -> np.ndarray:
         return derived_values.matrix_part1 - lambda_value * derived_values.matrix_part2
@@ -61,13 +70,22 @@ def optimize_using_eigen_value_and_bisection(
     for i in range(16):
         lambda_value = (min_lambda_value + max_lambda_value) / 2
         new_value = (
-            params.gamma
-            * params.beta
-            * get_max_eigenvalue(get_input_matrix(lambda_value))
-            - lambda_value
+            params.gamma * params.beta * get_max_eigenvalue(get_input_matrix(lambda_value)) - lambda_value
         )
 
-        if (max_lambda_value - min_lambda_value) < 1e-4:
+        # Record data for this iteration
+        iteration_time = time.time() - start_time
+        performance_data["algorithm_name"].append("eigen_bisection")
+        performance_data["iteration_count"].append(i + 1)
+        performance_data["time_taken"].append(iteration_time)
+        performance_data["Penalty"].append(float(new_value))  # Using new_value as penalty metric
+        performance_data["S"].append(params.S)
+        performance_data["A"].append(params.A)
+        performance_data["beta"].append(params.beta)
+        performance_data["hash"].append(rc_hash)
+        performance_data["start_time"].append(datetime.fromtimestamp(start_time))
+
+        if (max_lambda_value - min_lambda_value) < params.tolerance:
             break
         elif new_value < 0:
             max_lambda_value = lambda_value

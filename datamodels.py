@@ -1,4 +1,7 @@
-from typing import Tuple
+import hashlib
+from datetime import datetime
+from functools import cached_property
+from typing import Tuple, TypedDict
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -7,12 +10,13 @@ from pydantic import BaseModel, Field
 class PMUserParameters(BaseModel):
     S: int = Field(..., gt=0, description="Number of states")
     A: int = Field(..., gt=0, description="Number of actions")
-    beta: float = Field(gt=0, description="Uncertainty radius")
+    beta: float = Field(..., gt=0, description="Uncertainty radius")
     gamma: float = Field(0.9, gt=0, lt=1, description="Discount factor")
     tolerance: float = Field(1e-5, gt=0, description="Convergence tolerance")
 
-    class Config:
-        arbitrary_types_allowed = True
+
+def array_string_repr(array: np.ndarray):
+    return np.array2string(array, precision=2, separator=",", suppress_small=True, max_line_width=100_000)
 
 
 class PMRandomComponents(BaseModel):
@@ -20,6 +24,9 @@ class PMRandomComponents(BaseModel):
     pi: np.ndarray  # initial policy
     R: np.ndarray  # reward function
     P: np.ndarray  # transition kernel
+
+    class Config:
+        arbitrary_types_allowed = True
 
     @staticmethod
     def kernel(S: int, A: int) -> np.ndarray:
@@ -46,8 +53,27 @@ class PMRandomComponents(BaseModel):
 
         return cls(v0=v0, pi=pi, R=R, P=P)
 
-    class Config:
-        arbitrary_types_allowed = True
+    @cached_property
+    def md5_hash(self) -> str:
+        """
+        Calculate MD5 hash based on the string representation of numpy arrays with 2 decimal places.
+
+        Returns:
+            str: MD5 hash of the components
+        """
+        # Format each numpy array with 2 decimal places
+        v0_str = array_string_repr(self.v0)
+        pi_str = array_string_repr(self.pi)
+        R_str = array_string_repr(self.R)
+        P_str = array_string_repr(self.P)
+
+        # Combine all representations
+        combined_str = f"{v0_str}\n{pi_str}\n{R_str}\n{P_str}"
+
+        # Calculate MD5 hash
+        md5 = hashlib.md5(combined_str.encode("utf-8"))
+
+        return md5.hexdigest()
 
 
 class PMDerivedValues(BaseModel):
@@ -63,10 +89,11 @@ class PMDerivedValues(BaseModel):
     mu: np.ndarray  # initial state distribution
     dim_b_vector: int
 
+    class Config:
+        arbitrary_types_allowed = True
+
     @staticmethod
-    def compute_value_function(
-        P_pi: np.ndarray, R_pi: np.ndarray, gamma: float
-    ) -> np.ndarray:
+    def compute_value_function(P_pi: np.ndarray, R_pi: np.ndarray, gamma: float) -> np.ndarray:
         """
         Compute the value function v^π given the policy-averaged transition kernel and reward function.
         """
@@ -78,9 +105,7 @@ class PMDerivedValues(BaseModel):
         return v_pi
 
     @staticmethod
-    def compute_occupation_measures(
-        P_pi: np.ndarray, gamma: float
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def compute_occupation_measures(P_pi: np.ndarray, gamma: float) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute the occupation matrix D^π and occupation measure d^π.
         """
@@ -147,5 +172,45 @@ class PMDerivedValues(BaseModel):
             dim_b_vector=dim_b_vector,
         )
 
-    class Config:
-        arbitrary_types_allowed = True
+
+class AlgorithmPerformanceData(TypedDict):
+    """
+    TypedDict for data collected during CPI Algorithm execution.
+
+    This structure matches the dictionary used to collect data for the DataFrame
+    in the run_cpi_algorithm function.
+
+    Attributes:
+        algorithm_name: List of algorithm names (always "cpi_algorithm")
+        iteration_count: List of iteration numbers (1-based)
+        time_taken: List of execution times per iteration in seconds
+        Penalty: List of penalty values (J^π - J^π_{P_n})
+        S: List of state space sizes
+        A: List of action space sizes
+        beta: List of uncertainty radius values
+        hash: List of MD5 hashes of PMRandomComponents
+    """
+
+    algorithm_name: list[str]
+    iteration_count: list[int]
+    time_taken: list[float]
+    Penalty: list[float]
+    S: list[int]
+    A: list[int]
+    beta: list[float]
+    hash: list[str]
+    start_time: list[datetime]
+
+
+def initialize_empty_performance_data() -> AlgorithmPerformanceData:
+    return {
+        "algorithm_name": [],
+        "iteration_count": [],
+        "time_taken": [],
+        "Penalty": [],
+        "S": [],
+        "A": [],
+        "beta": [],
+        "hash": [],
+        "start_time": [],
+    }
