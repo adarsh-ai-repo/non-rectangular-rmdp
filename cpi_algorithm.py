@@ -41,14 +41,12 @@ def run_cpi_algorithm(
         max_iter: Maximum number of iterations for the algorithm.
 
     Returns:
-        A polars DataFrame containing:
-        - iteration_count: Number of iterations performed
-        - time_taken: Time taken for each iteration in seconds
-        - Penalty: The penalty value (J^π-J^π_{U_2})
-        - S: Number of states
-        - A: Number of actions
-        - beta: Uncertainty radius
-        - hash: MD5 hash of PMRandomComponents
+        tuple: (best_robust_return, iteration_number)
+            - best_robust_return: The best (minimum) robust return found
+            - iteration_number: The updated iteration number
+
+    Raises:
+        RuntimeError: If time or memory limits are exceeded
     """
 
     P_hat: Float[np.ndarray, "S A S"] = random_components.P
@@ -159,6 +157,7 @@ def run_cpi_algorithm(
         performance_data["beta"].append(params.beta)
         performance_data["hash"].append(rc_hash)
         performance_data["start_time"].append(datetime.fromtimestamp(start_time))
+        performance_data["nominal_return"].append(derived_values.j_pi)
 
         iteration_number += 1
 

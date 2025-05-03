@@ -101,6 +101,7 @@ def optimize_using_slsqp_method(
     performance_data["beta"].append(beta)
     performance_data["hash"].append(random_components.md5_hash)  # Placeholder hash
     performance_data["start_time"].append(datetime.fromtimestamp(start_time))
+    performance_data["nominal_return"].append(derived_values.j_pi)
 
     # Increment iteration counter
 

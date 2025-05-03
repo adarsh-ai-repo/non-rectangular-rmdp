@@ -85,6 +85,7 @@ def optimize_using_eigen_value_and_bisection(
         performance_data["A"].append(params.A)
         performance_data["beta"].append(params.beta)
         performance_data["hash"].append(rc_hash)
+        performance_data["nominal_return"].append(derived_values.j_pi)
         performance_data["start_time"].append(datetime.fromtimestamp(start_time))
 
         if (max_lambda_value - min_lambda_value) < params.tolerance:

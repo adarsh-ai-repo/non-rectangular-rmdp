@@ -1,14 +1,21 @@
 import hashlib
+import os
 from datetime import datetime
 from functools import cached_property
 from typing import Tuple, TypedDict
 
 import numpy as np
 from jaxtyping import Float, Shaped
+from joblib import Memory
 from pydantic import BaseModel, Field
 
 S = "S"
 A = "A"
+
+
+# Create a memory cache in a .joblib_cache directory
+cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".joblib_cache")
+memory = Memory(location=cache_dir, verbose=0)
 
 
 class PMUserParameters(BaseModel):
@@ -44,10 +51,10 @@ class PMRandomComponents(BaseModel):
         return p
 
     @classmethod
-    def generate(cls, params: PMUserParameters):
-        S, A = params.S, params.A
-
+    @memory.cache
+    def generate(cls, S: int, A: int, beta: float):
         # Generate random components
+
         v0 = np.random.randn(S)
         pi = np.random.rand(S, A)
         # Normalize policy
@@ -212,6 +219,7 @@ class AlgorithmPerformanceData(TypedDict):
     A: list[int]
     beta: list[float]
     hash: list[str]
+    nominal_return: list[float]
     start_time: list[datetime]
 
 
@@ -225,5 +233,6 @@ def initialize_empty_performance_data() -> AlgorithmPerformanceData:
         "A": [],
         "beta": [],
         "hash": [],
+        "nominal_return": [],
         "start_time": [],
     }

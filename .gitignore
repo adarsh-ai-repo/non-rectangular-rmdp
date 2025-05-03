@@ -13,3 +13,6 @@ cache/**
 backups/**
 *.png
 *.csv
+.joblib_cache/**
+*.parquet
+*.db
