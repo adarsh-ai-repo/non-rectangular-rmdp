@@ -1,7 +1,6 @@
 import time
 from datetime import datetime
 
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Float
 from rich.progress import track
@@ -60,7 +59,7 @@ def run_cpi_algorithm(
     rc_hash = random_components.md5_hash
     start_time = time.time()
     for n in track(list(range(max_iter))):
-        x: Float[np.ndarray, "1 A S"] = P_n - jnp.einsum("ias->as", P_n)[None, :, :]
+        x: Float[np.ndarray, "1 A S"] = P_n - np.einsum("ias->as", P_n)[None, :, :]
         # 2. Calculate value function v^pi_{P_n}
         v_pi_Pn: Float[np.ndarray, "S"] = PMDerivedValues.compute_value_function(
             np.einsum("sa,sab->sb", random_components.pi, P_n), derived_values.R_pi, params.gamma
@@ -71,7 +70,7 @@ def run_cpi_algorithm(
 
         def objective(p: Float[np.ndarray, "SAS"]) -> float:
             p_reshaped = p.reshape(params.S, params.A, params.S)
-            fpn = jnp.einsum(
+            fpn = np.einsum(
                 "s,sa,sai,ias->", derived_values.d_pi, random_components.pi, A_pi_Pn, p_reshaped
             ).item()
             fpn_list.append(fpn)

@@ -41,8 +41,6 @@ def RPE_Brute_Force(
     random_components: PMRandomComponents,
     num_samples: int,
     derived_values: PMDerivedValues,
-    performance_data: AlgorithmPerformanceData,
-    rc_hash: str,
 ) -> float:
     """
     Compute the Robust Policy Evaluation using brute force sampling.

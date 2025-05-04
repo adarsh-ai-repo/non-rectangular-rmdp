@@ -51,7 +51,7 @@ def save_performance_data(db_path: str, data: AlgorithmPerformanceData) -> None:
     cursor = conn.cursor()
 
     # Insert data
-    for i in range(len(data)):
+    for i in range(len(data["hash"])):
         # Convert datetime to ISO format string for SQLite storage
 
         try:
@@ -145,3 +145,8 @@ def load_performance_data(db_path: str, conditions: Dict[str, Any] = None) -> Al
 
     conn.close()
     return result
+
+
+if __name__ == "__main__":
+    x = load_performance_data("data/results.db")
+    print(sorted(set(list(zip(x["beta"], x["S"])))))
