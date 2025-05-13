@@ -49,3 +49,11 @@ python main.py [start] [step] [count] [beta]
 ```bash
 python main.py 10 5 4 0.05
 ```
+
+### System Information For Experiments
+
+OS: macOS Sequoia - Version 15.4.1
+Chip: Apple M2
+Total Number of Cores: 8 (4 performance and 4 efficiency)
+Memory: 16 GB
+Memory Type: LPDDR5

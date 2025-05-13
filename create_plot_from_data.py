@@ -3,6 +3,7 @@ from typing import Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from cycler import cycler
 from pydantic import BaseModel, Field
 
 
@@ -48,15 +49,22 @@ class RandomKernelPlotConfig(BasePlotConfig):
 
 def set_plot_style():
     """Configure the global plotting style settings."""
-    plt.style.use("bmh")
+    plt.style.use("default")  # Clean white background with black border
     plt.rcParams.update(
         {
             "font.size": 14,
             "axes.labelsize": 16,
-            "axes.titlesize": 17,
+            "axes.titlesize": 18,
             "legend.fontsize": 14,
-            "figure.dpi": 300,
-            "savefig.dpi": 300,
+            "figure.dpi": 100,
+            "savefig.dpi": 100,
+            "axes.spines.top": True,
+            "axes.spines.right": True,
+            "axes.spines.bottom": True,
+            "axes.spines.left": True,
+            "lines.linewidth": 2.5,
+            # Set colors to match the image
+            "axes.prop_cycle": cycler(color=["#0000FF", "#008000", "#8B4513", "#FF0000"]),
         }
     )
 
@@ -71,8 +79,10 @@ def setup_plot_basics(xlabel: str, ylabel: str, title: str):
     plt.xlabel(xlabel, labelpad=10)
     plt.ylabel(ylabel, labelpad=10)
     plt.title(title, pad=15)
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    plt.grid(False)  # Remove grid to match the image
+    plt.legend(
+        loc="lower right", frameon=True, framealpha=1.0
+    )  # Move legend to bottom right with solid background
 
 
 def save_and_close_plot(filepath: Path):
@@ -92,8 +102,7 @@ def plot_convergence_comparison(config: ConvergencePlotConfig):
     # Plot SLSQP
     plt.plot(
         data["slsqp"]["time"].abs().tolist() + [175],
-        data["slsqp"]["Maximize Using SLSQP"].tolist()
-        + [data["slsqp"]["Maximize Using SLSQP"].max()],
+        data["slsqp"]["Maximize Using SLSQP"].tolist() + [data["slsqp"]["Maximize Using SLSQP"].max()],
         label="SLSQP",
         linewidth=2.5,
     )
@@ -101,9 +110,7 @@ def plot_convergence_comparison(config: ConvergencePlotConfig):
     # Plot Eigenvalue
     plt.plot(
         [0] + data["eigen"]["time"].abs().tolist() + [170],
-        [0]
-        + data["eigen"]["Algorithm 1"].tolist()
-        + [data["eigen"]["Algorithm 1"].max()],
+        [0] + data["eigen"]["Algorithm 1"].tolist() + [data["eigen"]["Algorithm 1"].max()],
         label="Eigenvalue",
         linewidth=2.5,
     )
@@ -111,8 +118,7 @@ def plot_convergence_comparison(config: ConvergencePlotConfig):
     # Plot Random Rank 1
     plt.plot(
         data["rank1"]["time"].abs().tolist() + [175],
-        data["rank1"]["Random Rank 1 kernel"].tolist()
-        + [data["rank1"]["Random Rank 1 kernel"].max()],
+        data["rank1"]["Random Rank 1 kernel"].tolist() + [data["rank1"]["Random Rank 1 kernel"].max()],
         label="Random Rank 1",
         linewidth=2.5,
     )
@@ -164,6 +170,7 @@ def plot_random_kernel_comparison(config: RandomKernelPlotConfig):
         label="Optimal Value",
         linestyle=":",
         linewidth=2,
+        color="#FF0000",  # Red dotted line for Optimal Return
     )
 
     plt.plot(
@@ -178,7 +185,7 @@ def plot_random_kernel_comparison(config: RandomKernelPlotConfig):
 
 if __name__ == "__main__":
     # Common ylabel for all plots
-    penalty_ylabel = "Penalty ($J^\pi-J^\pi_{U_2}$) (Bigger is Better)"
+    penalty_ylabel = "Penalty ($J^\\pi-J^\\pi_{U_2}$) (Bigger is Better)"
 
     # Configuration for convergence plot
     convergence_config = ConvergencePlotConfig(

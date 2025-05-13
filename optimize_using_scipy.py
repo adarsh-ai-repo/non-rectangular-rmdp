@@ -7,12 +7,13 @@ from scipy.optimize import minimize
 from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
+# Algorithm 1 (Ours)
 def optimize_using_slsqp_method(
     params: PMUserParameters,
     derived_values: PMDerivedValues,
     random_components: PMRandomComponents,
     start_time: float,
-    penalties: list[float],
+    robust_returns: list[float],
     iteration: int,
     performance_data: AlgorithmPerformanceData,
 ) -> None:
@@ -41,14 +42,8 @@ def optimize_using_slsqp_method(
         numerator = np.dot(k, v_pi) * np.dot(d_pi, b_pi)
         denominator = 1 + gamma * np.dot(k, v_pi_b)
         obj_value = -numerator / denominator  # Negative because we're maximizing
-        penalties.append(obj_value)  # Store the latest value
+        # penalties.append(obj_value)  # Store the latest value
         return obj_value
-
-    def calculate_penalty() -> float:
-        """
-        float: Penalty value calculated as gamma * (-latest_obj_value)
-        """
-        return -1 * gamma * (min(penalties))
 
     def constraint_b(x):
         b = x[: S * A]
@@ -76,26 +71,51 @@ def optimize_using_slsqp_method(
     # Correct bounds: b is non-negative, k is unbounded
     bounds = [(0, None)] * (S * A) + [(None, None)] * S
 
-    _result = minimize(
+    result = minimize(
         objective,
         x0,
         method="SLSQP",
         bounds=bounds,
         constraints=constraints,
-        options={"maxiter": 100, "ftol": 5e-4, "iprint": 1, "disp": True},
+        options={"maxiter": 100, "ftol": params.tolerance, "iprint": 0, "disp": True},
     )
 
     current_time = time.time()
     time_taken = current_time - start_time
 
     # Calculate penalty using the latest objective function value
-    penalty = calculate_penalty()
+    # penalty = calculate_penalty()
+
+    if result.success:
+        b_opt, k_opt = result.x[: S * A], result.x[S * A :]
+        b_opt = b_opt / np.linalg.norm(b_opt, 2)
+        k_opt = params.beta * k_opt / np.linalg.norm(k_opt, 2)
+        _optimal_value = -result.fun  # Remember we minimized the negative
+    else:
+        return
+
+    P_n = random_components.P.reshape(S * A * S) - np.hstack([b_opt * k_i for k_i in k_opt])
+    # P_n = project_simplex(P_n).reshape(S, A, S)
+    for s in range(S):
+        for a in range(A):
+            summ = np.sum(P_n[s, a])
+            assert all(np.abs(P_n[s, a] - (P_n[s, a] / summ)) < 0.001)
+
+    v_pi_updated = PMDerivedValues.compute_value_function(
+        np.einsum("sa,sab->sb", random_components.pi, P_n),  # P_pi from P_n
+        derived_values.R_pi,
+        params.gamma,
+    )
+
+    # Calculate expected return under current policy and transition kernel
+    robust_return = float(derived_values.mu @ v_pi_updated)
+    robust_returns.append(robust_return)
 
     # Update performance data
-    performance_data["algorithm_name"].append("slsqp_method")
+    performance_data["algorithm_name"].append("slsqp_method_simplex_projection")
     performance_data["iteration_count"].append(iteration)  # 1-based indexing
     performance_data["time_taken"].append(time_taken)
-    performance_data["j_pi"].append(derived_values.j_pi - penalty)
+    performance_data["j_pi"].append(min(robust_returns))
     performance_data["S"].append(S)
     performance_data["A"].append(A)
     performance_data["beta"].append(beta)
@@ -104,10 +124,3 @@ def optimize_using_slsqp_method(
     performance_data["nominal_return"].append(derived_values.j_pi)
 
     # Increment iteration counter
-
-    # if result.success:
-    #     b_opt, k_opt = result.x[: S * A], result.x[S * A :]
-    #     optimal_value = -result.fun  # Remember we minimized the negative
-    #     return optimal_value, b_opt, k_opt
-    # else:
-    #     raise ValueError("Optimization failed: " + result.message)

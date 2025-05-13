@@ -47,57 +47,83 @@ def save_performance_data(db_path: str, data: AlgorithmPerformanceData) -> None:
         db_path: Path to the SQLite database file
         data: Performance data to save
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
 
-    # Insert data
-    for i in range(len(data["hash"])):
-        # Convert datetime to ISO format string for SQLite storage
-
-        try:
-            cursor.execute(
-                """
-            INSERT OR REPLACE INTO performance_data 
-            (hash, algorithm_name, iteration_count, time_taken, j_pi, nominal_return, S, A, beta, start_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    data["hash"][i],
-                    data["algorithm_name"][i],
-                    data["iteration_count"][i],
-                    data["time_taken"][i],
-                    data["j_pi"][i],
-                    data["nominal_return"][i],
-                    data["S"][i],
-                    data["A"][i],
-                    data["beta"][i],
-                    data["start_time"][i],
-                ),
-            )
-        except sqlite3.IntegrityError:
-            # If there's a primary key conflict, update the existing record
-            cursor.execute(
-                """
-            UPDATE performance_data 
-            SET time_taken = ?, j_pi = ?, S = ?, A = ?, beta = ?, start_time = ?, nominal_return = ?
-            WHERE hash = ? AND algorithm_name = ? AND iteration_count = ?
-            """,
-                (
-                    data["time_taken"][i],
-                    data["j_pi"][i],
-                    data["S"][i],
-                    data["A"][i],
-                    data["beta"][i],
-                    data["start_time"][i],
-                    data["nominal_return"][i],
-                    data["hash"][i],
-                    data["algorithm_name"][i],
-                    data["iteration_count"][i],
-                ),
+        for i in range(len(data["hash"])):
+            # The `start_time` is a datetime object, sqlite3 will convert it to ISO format string.
+            record_data_insert = (
+                data["hash"][i],
+                data["algorithm_name"][i],
+                data["iteration_count"][i],
+                data["time_taken"][i],
+                data["j_pi"][i],
+                data["nominal_return"][i],
+                data["S"][i],
+                data["A"][i],
+                data["beta"][i],
+                data["start_time"][i],
             )
 
-    conn.commit()
-    conn.close()
+            record_data_update = (
+                data["time_taken"][i],
+                data["j_pi"][i],
+                data["S"][i],
+                data["A"][i],
+                data["beta"][i],
+                data["start_time"][i],
+                data["nominal_return"][i],
+                data["hash"][i],
+                data["algorithm_name"][i],
+                data["iteration_count"][i],
+            )
+
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO performance_data
+                    (hash, algorithm_name, iteration_count, time_taken, j_pi, nominal_return, S, A, beta, start_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    record_data_insert,
+                )
+                if cursor.rowcount == 0:
+                    # This should ideally not happen with INSERT unless there's a very specific trigger/constraint.
+                    # For INSERT OR REPLACE, it would always be 1.
+                    # If we strictly use INSERT, this check is more for unexpected scenarios.
+                    print(f"Warning: INSERT operation did not affect any rows for data at index {i}.")
+
+            except sqlite3.IntegrityError:
+                # Primary key conflict, try to update the existing record
+                cursor.execute(
+                    """
+                    UPDATE performance_data
+                    SET time_taken = ?, j_pi = ?, S = ?, A = ?, beta = ?, start_time = ?, nominal_return = ?
+                    WHERE hash = ? AND algorithm_name = ? AND iteration_count = ?
+                    """,
+                    record_data_update,
+                )
+                if cursor.rowcount == 0:
+                    print(
+                        f"Warning: UPDATE operation did not affect any rows for data at index {i}."
+                        " This might indicate the record to update was not found, despite IntegrityError."
+                    )
+            except sqlite3.Error as e:
+                print(f"An error occurred during database operation for data at index {i}: {e}")
+                # Depending on requirements, you might want to re-raise or handle more gracefully
+                raise
+
+        conn.commit()
+
+    except sqlite3.Error as e:
+        print(f"A database error occurred: {e}")
+        # Re-raise the exception if you want the caller to handle it
+        raise
+    finally:
+        if conn:
+            conn.close()
 
 
 def load_performance_data(db_path: str, conditions: Dict[str, Any] = None) -> AlgorithmPerformanceData:
@@ -149,4 +175,4 @@ def load_performance_data(db_path: str, conditions: Dict[str, Any] = None) -> Al
 
 if __name__ == "__main__":
     x = load_performance_data("data/results.db")
-    print(sorted(set(list(zip(x["beta"], x["S"])))))
+    print(sorted(set(list(x["algorithm_name"]))))

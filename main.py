@@ -15,7 +15,7 @@ from datamodels import (
     PMUserParameters,
     initialize_empty_performance_data,
 )
-from db_operations import initialize_database, load_performance_data, save_performance_data
+from db_operations import initialize_database, save_performance_data
 from optimize_using_scipy import optimize_using_slsqp_method
 from rank_1_random_matrix import optimize_using_random_rank_1_kernel
 
@@ -45,23 +45,23 @@ def run_experiments(S: int, A: int, beta: float, db_path: str, num_trials: int =
     _bisection_result = optimize_using_eigen_value_and_bisection(
         params, derived_values, performance_data, random_components.md5_hash
     )
-    # start_time = time.time()
-    # iteration_count = 1
-    # best_robust_return = 10000000.0
+    start_time = time.time()
+    iteration_count = 1
+    best_robust_return = 10000000.0
 
-    # best_robust_return, iteration_count = run_cpi_algorithm(
-    #     params,
-    #     random_components,
-    #     derived_values,
-    #     performance_data,
-    #     iteration_count,
-    #     best_robust_return,
-    #     max_iter=20,
-    # )
-    # cpi_algorithm_time_taken = time.time() - start_time
+    best_robust_return, iteration_count = run_cpi_algorithm(
+        params,
+        random_components,
+        derived_values,
+        performance_data,
+        iteration_count,
+        best_robust_return,
+        max_iter=1000,
+    )
+    cpi_algorithm_time_taken = time.time() - start_time
 
-    # cpi_based_time_limit = cpi_algorithm_time_taken / 3 + EXTRA_TIME_LIMIT_IN_SEC
-    cpi_based_time_limit = 3600
+    cpi_based_time_limit = cpi_algorithm_time_taken / 3 + EXTRA_TIME_LIMIT_IN_SEC
+    # cpi_based_time_limit = 3600
     # Direct optimization using SLSQP
 
     start_time = time.time()
@@ -83,10 +83,11 @@ def run_experiments(S: int, A: int, beta: float, db_path: str, num_trials: int =
     allowed_time_limit = scipy_algorithm_time_taken + EXTRA_TIME_LIMIT_IN_SEC
 
     # Random rank-1 kernel search
+    start_time = time.time()
     random_results: list[float] = []
     random_start_time = time.time()
     iteration_count = 0
-    while (time.time() - random_start_time) < allowed_time_limit:
+    while (time.time() - random_start_time) < 7200:
         optimal_value, _, _ = optimize_using_random_rank_1_kernel(
             params,
             derived_values,
@@ -118,8 +119,6 @@ def run_experiments(S: int, A: int, beta: float, db_path: str, num_trials: int =
             random_components,
             num_samples=200,
             derived_values=derived_values,
-            performance_data=performance_data,
-            rc_hash=random_components.md5_hash,
         )
         random_kernel_results.append(params.gamma * optimal_value)
         iteration_time = time.time() - random_start_time
