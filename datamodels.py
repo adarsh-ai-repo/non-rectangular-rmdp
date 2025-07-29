@@ -52,7 +52,7 @@ class PMRandomComponents(BaseModel):
 
     @classmethod
     @memory.cache
-    def generate(cls, S: int, A: int, beta: float):
+    def generate(cls, S: int, A: int):
         # Generate random components
 
         v0 = np.random.randn(S)

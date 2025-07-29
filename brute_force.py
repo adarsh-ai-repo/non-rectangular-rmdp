@@ -1,6 +1,6 @@
 import numpy as np
 
-from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
+from datamodels import PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
 def compute_return(

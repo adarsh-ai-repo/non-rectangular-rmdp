@@ -4,6 +4,8 @@ from datetime import datetime
 import numpy as np
 from scipy.optimize import minimize
 
+from brute_force import project_to_simplex
+from brute_force_optimized import project_to_simplex_numba
 from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
@@ -95,11 +97,11 @@ def optimize_using_slsqp_method(
         return
 
     P_n = random_components.P.reshape(S * A * S) - np.hstack([b_opt * k_i for k_i in k_opt])
-    # P_n = project_simplex(P_n).reshape(S, A, S)
+    P_n = P_n.reshape(S, A, S)
     for s in range(S):
         for a in range(A):
             summ = np.sum(P_n[s, a])
-            assert all(np.abs(P_n[s, a] - (P_n[s, a] / summ)) < 0.001)
+            P_n[s, a, :] = P_n[s, a, :] / summ
 
     v_pi_updated = PMDerivedValues.compute_value_function(
         np.einsum("sa,sab->sb", random_components.pi, P_n),  # P_pi from P_n
