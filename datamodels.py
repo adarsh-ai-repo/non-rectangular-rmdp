@@ -44,6 +44,7 @@ class PMRandomComponents(BaseModel):
     @staticmethod
     def kernel(S: int, A: int) -> Float[np.ndarray, "S A S"]:
         p = np.random.rand(S, A, S)
+        p[p < 0] = 0
         for s in range(S):
             for a in range(A):
                 summ = np.sum(p[s, a])

@@ -3,7 +3,8 @@ from datetime import datetime
 
 import numpy as np
 
-from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMUserParameters
+from brute_force import compute_return
+from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
 def get_max_eigenvalue(A: np.ndarray):
@@ -38,11 +39,12 @@ def get_max_eigenvalue(A: np.ndarray):
 
     # Compute the maximum using the derived u_j
     max_norm_u_j = np.linalg.norm(A @ u_j)
-    return max_norm_u_j
+    return max_norm_u_j, u_j
 
 
 def optimize_using_eigen_value_and_bisection(
     params: PMUserParameters,
+    random_components: PMRandomComponents,
     derived_values: PMDerivedValues,
     performance_data: AlgorithmPerformanceData,
     rc_hash: str,
@@ -69,8 +71,31 @@ def optimize_using_eigen_value_and_bisection(
 
     for i in range(16):
         lambda_value = (min_lambda_value + max_lambda_value) / 2
-        new_value = (
-            params.gamma * params.beta * get_max_eigenvalue(get_input_matrix(lambda_value)) - lambda_value
+        max_norm_u_j, u_j = get_max_eigenvalue(get_input_matrix(lambda_value))
+        new_value = params.gamma * params.beta * max_norm_u_j - lambda_value
+
+        assert all(u_j >= 0)
+        b = params.beta * u_j
+        b_norm = np.linalg.norm(b)
+        assert b_norm > 0
+
+        # k = Au*/||Au*||
+        k = get_input_matrix(lambda_value) @ u_j
+        k_norm = np.dot(k, k)
+        assert k_norm > 0
+        k /= k_norm
+
+        # P = simplex_projection(P_0 - bk^T)
+        P_star = random_components.P - np.outer(b, k.T).reshape(params.S, params.A, params.S)
+        P_star[P_star < 0] = 0
+        P_star /= np.sum(P_star, axis=2, keepdims=True)
+        assert (P_star.sum(axis=2) >= 0).all()
+
+        robust_return = compute_return(P_star, params, random_components, derived_values)
+        nominal_return = compute_return(random_components.P, params, random_components, derived_values)
+        print(
+            f"nominal_return={nominal_return:.3f} previous_calculation of nominal return {derived_values.j_pi:.3f}\n"
+            f"new robust return={robust_return:.3f} previous robust return (nominal -lambda)={derived_values.j_pi - float(lambda_value):.3f}"
         )
 
         # Record data for this iteration
@@ -78,7 +103,7 @@ def optimize_using_eigen_value_and_bisection(
         performance_data["algorithm_name"].append("eigen_bisection")
         performance_data["iteration_count"].append(i + 1)
         performance_data["time_taken"].append(iteration_time)
-        performance_data["j_pi"].append(derived_values.j_pi - float(lambda_value))
+        performance_data["j_pi"].append(robust_return)
         performance_data["S"].append(params.S)
         performance_data["A"].append(params.A)
         performance_data["beta"].append(params.beta)

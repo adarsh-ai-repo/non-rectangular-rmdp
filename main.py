@@ -134,7 +134,7 @@ def run_experiments(S: int, A: int, beta: float, db_path: str, num_trials: int =
 
     # Bisection method
     _bisection_result = optimize_using_eigen_value_and_bisection(
-        params, derived_values, performance_data, random_components.md5_hash
+        params, random_components, derived_values, performance_data, random_components.md5_hash
     )
     # start_time = time.time()
     # iteration_count = 1

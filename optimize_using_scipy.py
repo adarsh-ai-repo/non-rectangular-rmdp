@@ -4,8 +4,6 @@ from datetime import datetime
 import numpy as np
 from scipy.optimize import minimize
 
-from brute_force import project_to_simplex
-from brute_force_optimized import project_to_simplex_numba
 from datamodels import AlgorithmPerformanceData, PMDerivedValues, PMRandomComponents, PMUserParameters
 
 
@@ -100,6 +98,7 @@ def optimize_using_slsqp_method(
     P_n = P_n.reshape(S, A, S)
     for s in range(S):
         for a in range(A):
+            P_n[P_n < 0] = 0
             summ = np.sum(P_n[s, a])
             P_n[s, a, :] = P_n[s, a, :] / summ
 
