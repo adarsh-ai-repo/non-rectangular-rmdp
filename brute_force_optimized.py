@@ -180,7 +180,7 @@ def sample_random_kernel_numba(
     A: int,
 ) -> np.ndarray:
     """
-    Optimized sample_random_kernel function using numba.
+    Optimized sample_random_kernel function using numba with L1 norm constraint.
 
     Args:
         P: Original transition kernel (S, A, S)
@@ -194,8 +194,8 @@ def sample_random_kernel_numba(
     # Generate noise
     noise = np.random.normal(0, beta, P.shape)
 
-    # Normalize noise (manual implementation for numba compatibility)
-    noise_norm = np.sqrt(np.sum(noise * noise))
+    # Normalize noise using L1 norm (manual implementation for numba compatibility)
+    noise_norm = np.sum(np.abs(noise))
     if noise_norm > 0:
         noise = noise / noise_norm
 

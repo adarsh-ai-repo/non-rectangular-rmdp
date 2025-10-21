@@ -10,10 +10,10 @@ from rich import print
 from tqdm import tqdm
 
 from algorithm_1 import optimize_using_eigen_value_and_bisection
+from brute_force_optimized import RPE_Brute_Force_Numba
 
 # from brute_force import RPE_Brute_Force
-# from cpi_algorithm import run_cpi_algorithm
-from brute_force_optimized import RPE_Brute_Force_Numba
+from cpi_algorithm import run_cpi_algorithm
 from datamodels import (
     PMDerivedValues,
     PMRandomComponents,
@@ -21,12 +21,10 @@ from datamodels import (
     initialize_empty_performance_data,
 )
 from db_operations import initialize_database, save_performance_data
-from optimize_using_scipy import optimize_using_slsqp_method
 
 # from rank_1_random_matrix import optimize_using_random_rank_1_kernel
 
 app = typer.Typer(pretty_exceptions_enable=False, help="Experiment runner for penalty values calculation")
-EXTRA_TIME_LIMIT_IN_SEC = 5
 
 
 def run_parallel_brute_force_iterations(
@@ -68,12 +66,10 @@ def run_parallel_brute_force_iterations(
             break
 
         # Run batch of iterations in parallel
-        batch_start_time = time.time()
         batch_results: list[float] = Parallel(n_jobs=n_jobs)(  # type: ignore
             delayed(RPE_Brute_Force_Numba)(params, random_components, num_samples, derived_values)
             for _ in tqdm(range(batch_size))
         )
-        batch_end_time = time.time()
 
         # Process each result from the batch
         for i, optimal_value in enumerate(batch_results):
@@ -136,42 +132,40 @@ def run_experiments(S: int, A: int, beta: float, db_path: str, num_trials: int =
     _bisection_result = optimize_using_eigen_value_and_bisection(
         params, random_components, derived_values, performance_data, random_components.md5_hash
     )
-    # start_time = time.time()
-    # iteration_count = 1
-    # best_robust_return = 10000000.0
+    iteration_count = 1
+    best_robust_return = 10000000.0
 
-    # best_robust_return, iteration_count = run_cpi_algorithm(
-    #     params,
-    #     random_components,
-    #     derived_values,
-    #     performance_data,
-    #     iteration_count,
-    #     best_robust_return,
-    #     max_iter=1000,
-    # )
-    # cpi_algorithm_time_taken = time.time() - start_time
+    best_robust_return, iteration_count = run_cpi_algorithm(
+        params,
+        random_components,
+        derived_values,
+        performance_data,
+        iteration_count,
+        best_robust_return,
+        max_iter=1000,
+    )
 
     # cpi_based_time_limit = cpi_algorithm_time_taken / 3 + EXTRA_TIME_LIMIT_IN_SEC
-    max_time_limit = 20 * 60
+    max_time_limit = 10 * 60
     # Direct optimization using SLSQP
 
-    start_time = time.time()
-    direct_results: list[float] = []
-    direct_start_time = time.time()
-    for i in range(num_trials):
-        if ((time.time() - direct_start_time) > max_time_limit) and (i > 2):
-            break
-        optimize_using_slsqp_method(
-            params,
-            derived_values,
-            random_components,
-            direct_start_time,
-            direct_results,
-            i + 1,
-            performance_data,
-        )
-    scipy_algorithm_time_taken = time.time() - start_time
-    allowed_time_limit = scipy_algorithm_time_taken + EXTRA_TIME_LIMIT_IN_SEC
+    # start_time = time.time()
+    # direct_results: list[float] = []
+    # direct_start_time = time.time()
+    # for i in range(num_trials):
+    #     if ((time.time() - direct_start_time) > max_time_limit) and (i > 2):
+    #         break
+    #     optimize_using_slsqp_method(
+    #         params,
+    #         derived_values,
+    #         random_components,
+    #         direct_start_time,
+    #         direct_results,
+    #         i + 1,
+    #         performance_data,
+    #     )
+    # scipy_algorithm_time_taken = time.time() - start_time
+    # allowed_time_limit = scipy_algorithm_time_taken + EXTRA_TIME_LIMIT_IN_SEC
 
     # # Random rank-1 kernel search
     # start_time = time.time()
@@ -208,7 +202,7 @@ def run_experiments(S: int, A: int, beta: float, db_path: str, num_trials: int =
         params=params,
         random_components=random_components,
         derived_values=derived_values,
-        allowed_time_limit=allowed_time_limit,
+        allowed_time_limit=max_time_limit,
         num_samples=100_000,
         start_time=random_start_time,
         n_jobs=-1,  # Use all available CPU cores

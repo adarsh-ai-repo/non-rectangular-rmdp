@@ -28,7 +28,7 @@ def run_cpi_algorithm(
     max_iter: int = 300,
 ) -> tuple[float, int]:
     """
-    Implements the CPI Algorithm 3.2 for Robust Policy Evaluation.
+    Implements the CPI Algorithm 3.2 for Robust Policy Evaluation with L1 norm constraint.
 
     Finds the worst-case transition kernel P within an L1 uncertainty ball around
     a nominal kernel P_hat, and computes the expected return under this worst-case kernel.
@@ -79,10 +79,10 @@ def run_cpi_algorithm(
         # Define bounds for each probability: 0 ≤ P(s'|s,a) ≤ 1
         bounds = [(0, 1)] * (params.S * params.A * params.S)
 
-        # Define the L2 norm constraint: ||P-P_hat||_2 ≤ β
-        def constraint_l2_norm(p: Float[np.ndarray, "SAS"]) -> float:
+        # Define the L1 norm constraint: ||P-P_hat||_1 ≤ β
+        def constraint_l1_norm(p: Float[np.ndarray, "SAS"]) -> float:
             p_hat_reshaped = P_hat.reshape(params.S * params.A * params.S)
-            return params.beta - float(np.linalg.norm(p - p_hat_reshaped, ord=2))
+            return params.beta - float(np.linalg.norm(p - p_hat_reshaped, ord=1))
 
         # Define the probability sum constraint: ∑_{s'} P(s'|s,a) = 1 for all s,a
         def constraint_prob_sum(p: Float[np.ndarray, "SAS"]) -> Float[np.ndarray, "SA"]:
@@ -91,7 +91,7 @@ def run_cpi_algorithm(
 
         # Create constraint dictionaries for scipy.optimize.minimize
         constraints = [
-            {"type": "ineq", "fun": constraint_l2_norm},  # L2 norm constraint
+            {"type": "ineq", "fun": constraint_l1_norm},  # L1 norm constraint
             {"type": "eq", "fun": constraint_prob_sum},  # Probability sum constraint
         ]
         try:
